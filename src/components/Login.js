@@ -7,6 +7,7 @@ import google_logo from "../assets/google_logo.png";
 function Login() {
     const [searchParams] = useSearchParams();
     const isError = searchParams.get("error") === "failed";
+    const apiBase = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
     const [loggedIn, setLoggedIn] = useState(false);
 
@@ -14,7 +15,7 @@ function Login() {
     useEffect(() => {
         const checkLoginStatus = async () => {
             try {
-                const res = await axios.get("http://localhost:5000/api/user-status", {
+                const res = await axios.get(`${apiBase}/api/user-status`, {
                     withCredentials: true
                 });
                 setLoggedIn(res.data.loggedIn);
@@ -29,10 +30,10 @@ function Login() {
         // Re-check every 2 seconds
         const interval = setInterval(checkLoginStatus, 2000);
         return () => clearInterval(interval);
-    }, []);
+    }, [apiBase]);
 
     const handleGoogleLogin = () => {
-        window.location.href = "http://localhost:5000/auth/google";
+        window.location.href = `${apiBase}/auth/google`;
     };
 
     // ✅ If logged in → render nothing (hide modal)
