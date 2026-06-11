@@ -53,7 +53,7 @@ const Toolbar = ({ onSelectChat, onNewChat, activeChatId }) => {
   /* ✅ INITIAL LOAD */
   useEffect(() => {
     fetchChats();
-  }, []);
+  }, [fetchChats]);
 
   /* ✅ SEARCH WITH DEBOUNCE */
   useEffect(() => {

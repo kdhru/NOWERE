@@ -25,7 +25,7 @@ function ChatHome() {
   const [selectedPairs, setSelectedPairs] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
 
-  const [user, setUser] = useState(null);
+  const [ setUser] = useState(null);
 
  useEffect(() => {
   fetch("http://localhost:5000/api/user", {
@@ -133,14 +133,6 @@ function ChatHome() {
     setShowArrow(!isAtBottom);
   };
 
-  const getConversationText = () => {
-    return messages
-      .map((msg) => {
-        const speaker = msg.role === "user" ? "You" : "Assistant";
-        return `${speaker}: ${msg.content}`;
-      })
-      .join("\n\n");
-  };
 
 const copyAllMessages = async () => {
   if (selectedPairs.length === 0) {
