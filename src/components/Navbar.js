@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import "./Navbar.css";
 import logo from "../assets/Logo.png";
+import forwardIcon from "../assets/forword.png";
 import { fetchJson } from "../utils/api";
 import config from "../config/api.js";
 
-function Navbar({ selectionMode, setSelectionMode, showChatActions, onCopyAll, onForward, onBackendStatus }) {
+function Navbar({ selectionMode, setSelectionMode, showChatActions, onCopyAll, onForward, onCancel, onBackendStatus }) {
   const [user, setUser] = useState(null);
 
   const fetchUser = useCallback(async () => {
@@ -53,6 +54,12 @@ function Navbar({ selectionMode, setSelectionMode, showChatActions, onCopyAll, o
     return `https://ui-avatars.com/api/?name=${firstLetter}&background=6b4a3a&color=fff&size=40`;
   };
 
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+    }
+  };
+
   return (
     <div className="navbar">
       <div className="nav-left">
@@ -72,7 +79,10 @@ function Navbar({ selectionMode, setSelectionMode, showChatActions, onCopyAll, o
               Copy all
             </button>
             <button className="nav-action-btn" onClick={onForward}>
-              Forward
+              Forward~<img src={forwardIcon} alt="Forward" />
+            </button>
+            <button className="nav-action-btn" onClick={handleCancel}>
+              Cancel
             </button>
           </>
         )}

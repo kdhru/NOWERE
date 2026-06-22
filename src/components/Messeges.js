@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import "./Messeges.css";
 import { io } from "socket.io-client";
 import Enter from "../assets/Enter.png";
+import forwardIcon from "../assets/forword.png";
 
 const apiBase = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const socket = io(apiBase, {
   withCredentials: true,
 });
 
-const Messeges = ({ forwardPackage, onForwardComplete }) => {
+const Messeges = ({ forwardPackage, onForwardComplete, onPrepareForward, onOpenForwarded, onOpenForwardedAsChat }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState(null);
 
@@ -215,53 +216,56 @@ const Messeges = ({ forwardPackage, onForwardComplete }) => {
   };
 
   const sendForwardedPackage = async () => {
-    if (!forwardPackage || forwardRecipients.length === 0 || !user) return;
+  if (!forwardPackage || forwardRecipients.length === 0 || !user) return;
 
-    try {
-      for (const recipientId of forwardRecipients) {
-        const res = await fetch(
-          `${apiBase}/api/messages/start`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              userId: recipientId,
-            }),
-          }
-        );
+  try {
+    for (const recipientId of forwardRecipients) {
+      // 1. Start or fetch the conversation
+      const res = await fetch(
+        `${apiBase}/api/messages/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ userId: recipientId }),
+        }
+      );
+      const convo = await res.json();
 
-        const convo = await res.json();
+      const forwardedText = `Forwarded Message\n\n${forwardPackage}`;
+      
+      // Define the complete message payload
+      const payload = {
+        conversationId: convo._id,
+        receiverId: recipientId,
+        text: forwardedText,
+        senderId: user.id,
+      };
 
-        await fetch(
-          `${apiBase}/api/messages/send`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              conversationId: convo._id,
-              receiverId: recipientId,
-              text: forwardPackage,
-              senderId: user.id,
-            }),
-          }
-        );
-      }
+      // 2. Save it to your database via HTTP
+      await fetch(
+        `${apiBase}/api/messages/send`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        }
+      );
 
-      setForwardRecipients([]);
-      onForwardComplete?.();
-      loadInbox();
-      alert("Forwarded message package to selected users.");
-    } catch (err) {
-      console.error("Failed to forward message package:", err);
-      alert("Unable to send forwarded message. Please try again.");
+      // 3. EMIT via socket so the backend can broadcast it instantly
+      socket.emit("send-message", payload);
     }
-  };
+
+    setForwardRecipients([]);
+    onForwardComplete?.();
+    loadInbox();
+    alert("Forwarded message package to selected users.");
+  } catch (err) {
+    console.error("Failed to forward message package:", err);
+    alert("Unable to send forwarded message. Please try again.");
+  }
+};
   /* ===============================
      OPEN CHAT
   =============================== */
@@ -406,13 +410,22 @@ const Messeges = ({ forwardPackage, onForwardComplete }) => {
         </div>
       )}
 
-      {isOpen && isForwardMode && forwardRecipients.length > 0 && (
+      {isOpen && isForwardMode && (
         <div className="forward-action-bar">
+          {forwardRecipients.length > 0 && (
+            <button
+              className="forward-send"
+              onClick={sendForwardedPackage}
+            >
+              <img src={Enter} alt="Send" />
+            </button>
+          )}
           <button
-            className="forward-send"
-            onClick={sendForwardedPackage}
+            className="forward-cancel"
+            type="button"
+            onClick={() => onForwardComplete?.()}
           >
-            <img src={Enter} alt="Send" />
+            Cancel
           </button>
         </div>
       )}
@@ -537,26 +550,71 @@ const Messeges = ({ forwardPackage, onForwardComplete }) => {
 
           <div className="chat-messages" ref={chatMessagesRef}>
             {messages.map((m, i) => {
-              const isForwarded = m.text?.includes("Forwarded Message");
-              
+              const messageText = m.text ?? m.content ?? "";
+              const isFromMe = m.sender === user.id || m.sender?._id === user.id;
+              const isForwarded = messageText.includes("Forwarded Message");
+
+              if (!isForwarded) {
+                // Regular message - simple display
+                return (
+                  <div
+                    key={i}
+                    className={isFromMe ? "me" : "them"}
+                  >
+                    {messageText}
+                  </div>
+                );
+              }
+
+              // Forwarded message - styled box
               return (
                 <div
                   key={i}
-                  className={
-                    m.sender === user.id ||
-                    m.sender?._id === user.id
-                      ? "me"
-                      : "them"
-                  }
+                  className={isFromMe ? "message-container me-container" : "message-container them-container"}
                 >
-                  {isForwarded ? (
-                    <div className="forwarded-message-box">
-                      <div className="forwarded-label">📦 Forwarded Message</div>
-                      <pre className="forwarded-content">{m.text}</pre>
+                  <div className="message-box">
+                    <div className={`message-label ${isFromMe ? "me-label" : "them-label"}`}>
+                      📦 Forwarded Message
                     </div>
-                  ) : (
-                    m.text
-                  )}
+                    <pre className="message-content">
+                      {messageText}
+                    </pre>
+                    <div className="message-actions">
+                      <button
+                        type="button"
+                        className="message-btn open"
+                        onClick={() => {
+                          const senderName =
+                            m.sender?.displayName ||
+                            m.sender?.name ||
+                            (typeof m.sender === "string"
+                              ? m.sender === user?.id
+                                ? user?.displayName
+                                : selectedUser?.displayName
+                              : selectedUser?.displayName) ||
+                            "Unknown";
+
+                          if (onOpenForwardedAsChat) {
+                            onOpenForwardedAsChat(messageText, senderName);
+                          }
+                        }}
+                      >
+                        Open
+                      </button>
+                      <button
+                        type="button"
+                        className="message-btn forward"
+                        onClick={() =>
+                          onPrepareForward
+                            ? onPrepareForward(messageText)
+                            : alert("Forward function not available.")
+                        }
+                        title="Forward this message"
+                      >
+                        <img src={forwardIcon} alt="Forward" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -569,17 +627,18 @@ const Messeges = ({ forwardPackage, onForwardComplete }) => {
           <div className="chat-send">
             <input
               value={text}
-              onChange={(e) =>
-                handleTyping(
-                  e.target.value
-                )
-              }
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              onChange={(e) => handleTyping(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault(); // Prevents the default behavior of the Enter key (e.g., new line in a textarea)
+                  sendMessage();
+                }
+              }}
               placeholder="Type message..."
             />
 
             <button onClick={sendMessage}>
-              <img src={Enter} alt="Send" style={{height: "30px" }} />
+              <img src={Enter} alt="Send" style={{ height: "30px" }} />
             </button>
           </div>
         </div>

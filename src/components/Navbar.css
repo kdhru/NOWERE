@@ -66,6 +66,15 @@
   cursor: pointer;
   font-size: 0.9rem;
   transition: background 0.2s ease, transform 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+}
+
+.nav-action-btn img {
+  width: 18px;
+  height: 18px;
 }
 
 .nav-action-btn:hover {

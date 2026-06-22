@@ -2,13 +2,21 @@ import React, { useCallback, useEffect, useState } from "react";
 import "./Toolbar.css";
 import logoVideo from "../assets/logo video.mp4";
 import { fetchJson } from "../utils/api";
+import forwardIcon from "../assets/forword.png";
+import mychatIcon from "../assets/my_chats.png";
 
 const apiBase = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 const Toolbar = ({ onSelectChat, onNewChat, onBackendStatus, activeChatId, isAuthenticated }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState("my");
   const [chats, setChats] = useState([]);
+
+  const displayedChats =
+    viewMode === "forwarded"
+      ? chats.filter((chat) => chat.title?.startsWith("Forwarded by "))
+      : chats.filter((chat) => !chat.title?.startsWith("Forwarded by "));
 
   /* ===== SIDEBAR STATE ===== */
   useEffect(() => {
@@ -119,6 +127,26 @@ const Toolbar = ({ onSelectChat, onNewChat, onBackendStatus, activeChatId, isAut
                                           /></div>}
       </div>
 
+      {/* FILTER TABS */}
+      {isOpen && (
+        <div className="toolbar-tabs">
+          <button
+            type="button"
+            className={`toolbar-tab ${viewMode === "my" ? "active" : ""}`}
+            onClick={() => setViewMode("my")}
+          >
+              <img className="my_chats" src={mychatIcon} alt="My Chats" /><br/> My Chats
+          </button>
+          <button
+            type="button"
+            className={`toolbar-tab ${viewMode === "forwarded" ? "active" : ""}`}
+            onClick={() => setViewMode("forwarded")}
+          >
+            <img className="forwarded" src={forwardIcon} alt="Forward" /> Forwarded
+          </button>
+        </div>
+      )}
+
       {/* SEARCH */}
       {isOpen && (
         <div className="search-box">
@@ -138,38 +166,43 @@ const Toolbar = ({ onSelectChat, onNewChat, onBackendStatus, activeChatId, isAut
 
       {/* CHAT LIST */}
       <div className="chat-list">
-        {chats.length > 0 ? (
-          chats.map((chat) => (
-            <div
-              key={chat._id}
-              className={`chat-item ${
-                activeChatId === chat._id ? "active" : ""
-              }`}
-              onClick={() => onSelectChat(chat)}
-            >
-              {isOpen ? (
-                <>
-                  <span className="chat-text">{chat.title}</span>
-                  <span className="dots">⋮</span>
-                </>
-              ) : (
-                <div className="chat-icon">
-                  {chat.title?.charAt(0).toUpperCase()}{chat.title?.charAt(1)}...
-                </div>
-              )}
-            </div>
-          ))
+        {displayedChats.length > 0 ? (
+          displayedChats.map((chat) => {
+            const isForwarded = chat.title?.startsWith("Forwarded by ");
+
+            return (
+              <div
+                key={chat._id}
+                className={`chat-item ${
+                  activeChatId === chat._id ? "active" : ""
+                } ${isForwarded ? "forwarded-chat" : ""}`}
+                onClick={() => onSelectChat(chat)}
+              >
+                {isOpen ? (
+                  <>
+                    <span className="chat-text">{chat.title}</span>
+                    <span className="dots">⋮</span>
+                  </>
+                ) : (
+                  <div className="chat-icon">
+                    {chat.title?.charAt(0).toUpperCase()}{chat.title?.charAt(1)}...
+                  </div>
+                )}
+              </div>
+            );
+          })
         ) : (
           isOpen && <div className="no-results">No chats found</div>
         )}
       </div>
+      
 
       {/* BOTTOM */}
       <div className="bottom">
         ⚙️ {isOpen && <span>Settings</span>}
       </div>
     </div>
-  );
+  )
 };
 
 export default Toolbar;

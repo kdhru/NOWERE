@@ -24,6 +24,7 @@ function ChatHome() {
   const [selectedPairs, setSelectedPairs] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [forwardPackage, setForwardPackage] = useState(null);
+  const [openedForwardedMessage, setOpenedForwardedMessage] = useState(null);
   const [backendWarning, setBackendWarning] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const backendWarningTimer = useRef(null);
@@ -49,7 +50,7 @@ function ChatHome() {
         if (errorMsg.includes("backend not running") && !errorMsg.includes("unauthorized")) {
           showBackendWarning();
         }
-        document.title = "My App";
+        document.title = "Nowere";
       });
   }, [showBackendWarning]);
 
@@ -119,7 +120,7 @@ function ChatHome() {
       })
       .join("\n\n");
 
-    setForwardPackage(`----- Forwarded Message -----\n${selectedText}\n-----`);
+    setForwardPackage(`${selectedText}`);
   };
 
   useEffect(() => {
@@ -179,6 +180,13 @@ function ChatHome() {
     setShowArrow(!isAtBottom);
   };
 
+  const chatPairs = [];
+  for (let i = 0; i < messages.length; i += 2) {
+    chatPairs.push({
+      pairId: i,
+      pairMessages: messages.slice(i, i + 2),
+    });
+  }
 
   const copyAllMessages = async () => {
     if (selectedPairs.length === 0) {
@@ -213,6 +221,12 @@ function ChatHome() {
       console.error(err);
       alert("Unable to copy selected chat.");
     }
+  };
+
+  const handleCancel = () => {
+    setSelectedPairs([]);
+    setSelectionMode(false);
+    setForwardPackage(null);
   };
 
   const startListening = () => {
@@ -328,6 +342,49 @@ function ChatHome() {
     }
   };
 
+  const markdownComponents = {
+    p: ({ children }) => <span>{children}</span>,
+    code({ inline, className, children }) {
+      const language = className?.replace("language-", "").toUpperCase() || "CODE";
+
+      if (inline) {
+        return <code className="inline-code">{children}</code>;
+      }
+
+      return (
+        <div className="code-block">
+          <div className="code-header">
+            <span>{language}</span>
+
+            <button
+              className="copy-btn"
+              onClick={() => navigator.clipboard.writeText(String(children).trim())}
+            >
+              📋
+            </button>
+          </div>
+
+          <pre>
+            <code>{children}</code>
+          </pre>
+        </div>
+      );
+    },
+  };
+
+  const parseForwarded = (text) => {
+    if (!text) return { user: null, assistant: null };
+    const youIndex = text.indexOf('You:');
+    const assistantIndex = text.indexOf('Assistant:');
+    if (youIndex !== -1 && assistantIndex !== -1 && assistantIndex > youIndex) {
+      const user = text.substring(youIndex + 4, assistantIndex).trim();
+      const assistant = text.substring(assistantIndex + 10).trim();
+      return { user, assistant };
+    }
+    // fallback: no split found
+    return { user: null, assistant: text };
+  };
+
   return (
     <>
       
@@ -371,19 +428,64 @@ function ChatHome() {
                 }
                 handleForward();
               }}
+              onCancel={handleCancel}
             />
           </div>
 
           <div className={`chat-wrapper ${messages.length > 0 ? "chat-active" : "chat-empty"}`}>
             <div className="content-area" ref={scrollContainerRef} onScroll={handleScroll}>
-              {messages.length === 0 && !isLoading ? (
+              {openedForwardedMessage ? (
+                (() => {
+                  const { user, assistant } = parseForwarded(openedForwardedMessage);
+
+                  return (
+                    <div className="forwarded-message-display">
+                      <button
+                        className="close-forwarded-btn"
+                        onClick={() => setOpenedForwardedMessage(null)}
+                      >
+                        ← Back
+                      </button>
+
+                      <div className="forwarded-message-content">
+                        <h3 className="forwarded-display-title">📦 Forwarded Message</h3>
+
+                        {user ? (
+                          <div className="chat-pair">
+                            <div className="message-row user">
+                              <div className="bubble">
+                                <ReactMarkdown components={markdownComponents}>
+                                  {user}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+
+                            <div className="message-row assistant">
+                              <div className="bubble">
+                                <ReactMarkdown components={markdownComponents}>
+                                  {assistant}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="message-row assistant">
+                            <div className="bubble">
+                              <ReactMarkdown components={markdownComponents}>
+                                {assistant}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : messages.length === 0 && !isLoading ? (
                 <h1 className="title">Ready when you are.</h1>
               ) : (
                 <div className="chat-messages">
-                  {messages.map((msg, index) => {
-                    if (index % 2 !== 0) return null; // render only on pairs
-
-                    const pairId = index;
+                  {chatPairs.map(({ pairId, pairMessages }) => {
                     const isSelected = selectedPairs.includes(pairId);
 
                     return (
@@ -396,108 +498,63 @@ function ChatHome() {
                           type="checkbox"
                           className="pair-checkbox"
                           checked={isSelected}
-                          onChange={() => togglePair(index)}
+                          onChange={() => togglePair(pairId)}
                         />
 
-                        {/* USER MESSAGE */}
-                        <div className="message-row user">
-                          <div className="bubble">
-                            <ReactMarkdown
-                              components={{
-                                p: ({ children }) => <span>{children}</span>,
+                        {pairMessages.map((msg, msgIndex) => (
+                          <div
+                            key={msg._id ?? msgIndex}
+                            className={`message-row ${msg.role === "user" ? "user" : "assistant"}`}
+                          >
+                            <div className="bubble">
+                              <ReactMarkdown
+                                components={{
+                                  p: ({ children }) => <span>{children}</span>,
 
-                                code({ inline, className, children }) {
-                                  const language =
-                                    className?.replace("language-", "").toUpperCase() || "CODE";
+                                  code({ inline, className, children }) {
+                                    const language =
+                                      className?.replace("language-", "").toUpperCase() || "CODE";
 
-                                  if (inline) {
+                                    if (inline) {
+                                      return (
+                                        <code className="inline-code">
+                                          {children}
+                                        </code>
+                                      );
+                                    }
+
                                     return (
-                                      <code className="inline-code">
-                                        {children}
-                                      </code>
-                                    );
-                                  }
+                                      <div className="code-block">
+                                        <div className="code-header">
+                                          <span>{language}</span>
 
-                                  return (
-                                    <div className="code-block">
-                                      <div className="code-header">
-                                        <span>{language}</span>
+                                          <button
+                                            className="copy-btn"
+                                            onClick={() =>
+                                              navigator.clipboard.writeText(
+                                                String(children).trim()
+                                              )
+                                            }
+                                          >
+                                            <div className="copy-icon-wrapper">
+                                              <img src={copyIcon} alt="copy" className="copy-icon"/>
+                                            </div>
+                                          </button>
+                                        </div>
 
-                                        <button
-                                          className="copy-btn"
-                                          onClick={() =>
-                                            navigator.clipboard.writeText(
-                                              String(children).trim()
-                                            )
-                                          }
-                                        >
-                                          📋
-                                        </button>
+                                        <pre>
+                                          <code>{children}</code>
+                                        </pre>
                                       </div>
-
-                                      <pre>
-                                        <code>{children}</code>
-                                      </pre>
-                                    </div>
-                                  );
-                                },
-                              }}
-                            >
-                              {messages[index]?.content}
-                            </ReactMarkdown>
-                          </div>
-                        </div>
-
-                        {/* AI MESSAGE */}
-                        <div className="message-row assistant">
-                          <div className="bubble">
-                            <ReactMarkdown
-                              components={{
-                                p: ({ children }) => <span>{children}</span>,
-
-                                code({ inline, className, children }) {
-                                  const language =
-                                    className?.replace("language-", "").toUpperCase() || "CODE";
-
-                                  if (inline) {
-                                    return (
-                                      <code className="inline-code">
-                                        {children}
-                                      </code>
                                     );
-                                  }
-
-                                  return (
-                                    <div className="code-block">
-                                      <div className="code-header">
-                                        <span>{language}</span>
-
-                                        <button
-                                          className="copy-btn"
-                                          onClick={() =>
-                                            navigator.clipboard.writeText(
-                                              String(children).trim()
-                                            )
-                                          }
-                                        >
-                                          <div className="copy-icon-wrapper">
-                                            <img src={copyIcon} alt="copy" className="copy-icon"/>
-                                          </div>
-                                        </button>
-                                      </div>
-
-                                      <pre>
-                                        <code>{children}</code>
-                                      </pre>
-                                    </div>
-                                  );
-                                },
-                              }}
-                            >
-                              {messages[index + 1]?.content}
-                            </ReactMarkdown>
+                                  },
+                                }}
+                              >
+                                {msg.content}
+                              </ReactMarkdown>
+                            </div>
                           </div>
-                        </div>
+                        ))}
                       </div>
                     );
                   })}
@@ -578,6 +635,39 @@ function ChatHome() {
         <Messeges
           forwardPackage={forwardPackage}
           onForwardComplete={() => setForwardPackage(null)}
+          onPrepareForward={(text) => setForwardPackage(text)}
+          onOpenForwarded={(text) => setOpenedForwardedMessage(text)}
+          onOpenForwardedAsChat={async (text, senderName) => {
+            try {
+              const apiBase = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+
+              const payload = {
+                title: `Forwarded by ${senderName || "Unknown"}`,
+                messages: [
+                  {
+                    role: "assistant",
+                    content: text,
+                  },
+                ],
+              };
+
+              const created = await fetchJson(`${apiBase}/api/chat/create`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(payload),
+              });
+
+              if (created?._id) {
+                setChatId(created._id);
+                setMessages(created.messages || []);
+                navigate(`/chat/${created._id}`);
+              }
+            } catch (err) {
+              console.error("Open forwarded as chat failed:", err);
+              alert("Unable to open forwarded message as a chat.");
+            }
+          }}
         />
       </div>
     </>
